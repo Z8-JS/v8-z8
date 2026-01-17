@@ -1,0 +1,96 @@
+name: Build V8 with Clang (Windows)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-v8:
+    runs-on: windows-2022
+    env:
+      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Depot Tools
+        shell: powershell
+        run: |
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\depot_tools
+          echo "C:\depot_tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          cd C:\depot_tools
+          ./gclient.bat
+
+      - name: Fetch V8 Source
+        shell: powershell
+        run: |
+          mkdir v8_build
+          cd v8_build
+          # Tắt prompt tương tác
+          $env:DEPOT_TOOLS_UPDATE = 0
+          fetch --no-history v8
+          cd v8
+          gclient sync --no-history --shallow
+
+      - name: Patch V8 Source
+        working-directory: v8_build/v8
+        shell: powershell
+        run: |
+          # Sửa lỗi chuyển đổi std::function sang FunctionRef trong backing-store.cc
+          $backing_store = "src/objects/backing-store.cc"
+          if (Test-Path $backing_store) {
+            (Get-Content $backing_store) -replace 'fn, internal::AllocationType::kOld', '[&](){ return fn(); }, internal::AllocationType::kOld' | Set-Content $backing_store
+            Write-Host "✅ Patched backing-store.cc"
+          }
+
+      - name: Configure Build (Clang Mode)
+        working-directory: v8_build/v8
+        shell: powershell
+        run: |
+          # Tạo thư mục config
+          mkdir -p out.gn/x64.release
+
+          # GN Args tối ưu cho Clang trên Windows
+          $gn_args = @'
+          is_debug = false
+          target_cpu = "x64"
+          is_component_build = false
+          v8_monolithic = true
+          v8_use_external_startup_data = true
+          is_clang = true
+          use_custom_libcxx = false
+          v8_enable_pointer_compression = true
+          v8_enable_sandbox = true
+          symbol_level = 0
+          v8_enable_v8_checks = false
+          treat_warnings_as_errors = false
+          v8_enable_web_assembly = true
+          use_lld = true
+          v8_enable_google_benchmark = false
+          v8_enable_i18n_support = true
+          '@
+          $gn_args | Out-File -FilePath out.gn/x64.release/args.gn -Encoding ascii
+
+          # Thực thi GN
+          gn gen out.gn/x64.release
+
+      - name: Build V8 Monolith
+        working-directory: v8_build/v8
+        shell: powershell
+        run: |
+          ninja -C out.gn/x64.release v8_monolith
+
+      - name: Upload V8 Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: v8_monolith_clang_windows_x64
+          path: |
+            v8_build/v8/out.gn/x64.release/obj/v8_monolith.lib
+            v8_build/v8/out.gn/x64.release/icudtl.dat
+            v8_build/v8/out.gn/x64.release/snapshot_blob.bin
+            v8_build/v8/include
