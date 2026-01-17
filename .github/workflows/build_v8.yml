@@ -61,7 +61,7 @@ jobs:
           target_cpu = "x64"
           is_component_build = false
           v8_monolithic = true
-          v8_use_external_startup_data = true
+          v8_use_external_startup_data = false
           is_clang = true
           use_custom_libcxx = false
           v8_enable_pointer_compression = true
@@ -83,6 +83,7 @@ jobs:
         working-directory: v8_build/v8
         shell: powershell
         run: |
+          # Ninja build v8_monolith
           ninja -C out.gn/x64.release v8_monolith
 
       - name: Upload V8 Artifacts
@@ -92,5 +93,4 @@ jobs:
           path: |
             v8_build/v8/out.gn/x64.release/obj/v8_monolith.lib
             v8_build/v8/out.gn/x64.release/icudtl.dat
-            v8_build/v8/out.gn/x64.release/snapshot_blob.bin
             v8_build/v8/include
