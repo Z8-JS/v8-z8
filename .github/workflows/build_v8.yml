@@ -39,6 +39,8 @@ jobs:
         run: |
           git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
           echo "$HOME/depot_tools" >> $GITHUB_PATH
+          export PATH="$HOME/depot_tools:$PATH"
+          gclient --version
 
       - name: Fetch V8 Source
         shell: bash
@@ -100,6 +102,7 @@ jobs:
         run: |
           git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
           export PATH="$HOME/depot_tools:$PATH"
+          gclient --version
           export DEPOT_TOOLS_UPDATE=0
           mkdir v8_build && cd v8_build
           fetch --no-history v8
