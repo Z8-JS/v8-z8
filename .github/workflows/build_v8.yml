@@ -1,4 +1,4 @@
-name: Build V8 with Clang (Windows)
+name: Build V8 Multi-Platform
 
 on:
   push:
@@ -6,19 +6,27 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-v8:
-    runs-on: windows-2022
+  build-v8-desktop:
+    name: Build V8 on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-22.04, macos-latest]
+
     env:
       DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install Depot Tools
+      - name: Install Depot Tools (Windows)
+        if: runner.os == 'Windows'
         shell: powershell
         run: |
           git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\depot_tools
@@ -26,71 +34,99 @@ jobs:
           cd C:\depot_tools
           ./gclient.bat
 
+      - name: Install Depot Tools (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
+          echo "$HOME/depot_tools" >> $GITHUB_PATH
+
       - name: Fetch V8 Source
-        shell: powershell
+        shell: bash
         run: |
           mkdir v8_build
           cd v8_build
-          # Tắt prompt tương tác
-          $env:DEPOT_TOOLS_UPDATE = 0
+          export DEPOT_TOOLS_UPDATE=0
           fetch --no-history v8
           cd v8
           gclient sync --no-history --shallow
 
-      - name: Patch V8 Source
+      - name: Patch V8 Source (Windows)
+        if: runner.os == 'Windows'
         working-directory: v8_build/v8
         shell: powershell
         run: |
-          # Sửa lỗi chuyển đổi std::function sang FunctionRef trong backing-store.cc
           $backing_store = "src/objects/backing-store.cc"
           if (Test-Path $backing_store) {
             (Get-Content $backing_store) -replace 'fn, internal::AllocationType::kOld', '[&](){ return fn(); }, internal::AllocationType::kOld' | Set-Content $backing_store
             Write-Host "✅ Patched backing-store.cc"
           }
 
-      - name: Configure Build (Clang Mode)
+      - name: Configure Build
         working-directory: v8_build/v8
-        shell: powershell
+        shell: bash
         run: |
-          # Tạo thư mục config
           mkdir -p out.gn/x64.release
 
-          # GN Args tối ưu cho Clang trên Windows
-          $gn_args = @'
-          is_debug = false
-          target_cpu = "x64"
-          is_component_build = false
-          v8_monolithic = true
-          v8_use_external_startup_data = false
-          is_clang = true
-          use_custom_libcxx = false
-          v8_enable_pointer_compression = true
-          v8_enable_sandbox = true
-          symbol_level = 0
-          v8_enable_v8_checks = false
-          treat_warnings_as_errors = false
-          v8_enable_web_assembly = true
-          use_lld = true
-          v8_enable_google_benchmark = false
-          v8_enable_i18n_support = true
-          '@
-          $gn_args | Out-File -FilePath out.gn/x64.release/args.gn -Encoding ascii
+          # Default GN Args
+          GN_ARGS="is_debug=false target_cpu=\"x64\" is_component_build=false v8_monolithic=true v8_use_external_startup_data=false is_clang=true use_custom_libcxx=false v8_enable_pointer_compression=true v8_enable_sandbox=true symbol_level=0 v8_enable_v8_checks=false treat_warnings_as_errors=false v8_enable_web_assembly=true v8_enable_google_benchmark=false v8_enable_i18n_support=true"
 
-          # Thực thi GN
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            GN_ARGS="$GN_ARGS use_lld=true"
+          fi
+
+          echo "$GN_ARGS" > out.gn/x64.release/args.gn
           gn gen out.gn/x64.release
 
       - name: Build V8 Monolith
         working-directory: v8_build/v8
-        shell: powershell
-        run: |
-          # Ninja build v8_monolith
-          ninja -C out.gn/x64.release v8_monolith
+        run: ninja -C out.gn/x64.release v8_monolith
 
       - name: Upload V8 Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: v8_monolith_clang_windows_x64
+          name: v8_monolith_${{ matrix.os }}_x64
           path: |
-            v8_build/v8/out.gn/x64.release/obj/v8_monolith.lib
+            v8_build/v8/out.gn/x64.release/obj/v8_monolith.*
+            v8_build/v8/out.gn/x64.release/icudtl.dat
+            v8_build/v8/include
+
+  build-v8-freebsd:
+    name: Build V8 on FreeBSD
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build V8 on FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            pkg install -y git python3 py311-setuptools ninja gperf bash bison
+          run: |
+            # Clone Depot Tools
+            git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
+            export PATH="$HOME/depot_tools:$PATH"
+            export DEPOT_TOOLS_UPDATE=0
+
+            # Fetch V8
+            mkdir v8_build && cd v8_build
+            fetch --no-history v8
+            cd v8
+            gclient sync --no-history --shallow
+
+            # Configure
+            mkdir -p out.gn/x64.release
+            echo 'is_debug=false target_cpu="x64" is_component_build=false v8_monolithic=true v8_use_external_startup_data=false is_clang=true use_custom_libcxx=false v8_enable_pointer_compression=true v8_enable_sandbox=true symbol_level=0 v8_enable_i18n_support=true' > out.gn/x64.release/args.gn
+            gn gen out.gn/x64.release
+
+            # Build
+            ninja -C out.gn/x64.release v8_monolith
+
+      - name: Upload Artifacts (FreeBSD)
+        uses: actions/upload-artifact@v4
+        with:
+          name: v8_monolith_freebsd_x64
+          path: |
+            v8_build/v8/out.gn/x64.release/obj/v8_monolith.a
             v8_build/v8/out.gn/x64.release/icudtl.dat
             v8_build/v8/include
