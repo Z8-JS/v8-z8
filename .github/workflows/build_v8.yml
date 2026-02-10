@@ -127,23 +127,33 @@ jobs:
           SDK_PATH=$(xcrun --show-sdk-path)
           echo "SDK path: $SDK_PATH"
 
-          # Find all modulemap files referenced in the ninja build file that reside in the SDK
-          # but do not actually exist on disk.
-          grep -o "${SDK_PATH}[^ ]*\.modulemap" "$BUILD_DIR/build.ninja" | sort -u | while read f; do
+          # Regex to find all .modulemap files referenced in build rules
+          # Expected format in build.ninja: ... needed by '.../Foo.pcm', ...
+          # Or explicit dependencies. We scan for any absolute path ending in .modulemap
+          grep -o "/[^ ]*\.modulemap" "$BUILD_DIR/build.ninja" | sort -u | while read f; do
             if [ ! -f "$f" ]; then
-              echo "⚠️ Creating missing dummy modulemap: $f"
+              echo "⚠️ Creating missing dummy modulemap (scanned): $f"
               sudo mkdir -p "$(dirname "$f")"
               echo "module \"$(basename "$f" .modulemap)\" { header \"$(basename "$f" .modulemap).h\" }" | sudo tee "$f" > /dev/null
             fi
           done
 
-          # Double check common ones just in case grep missed them due to path normalization
-          for map in DarwinBasic DarwinFoundation1 DarwinFoundation2; do
-            f="$SDK_PATH/usr/include/$map.modulemap"
-            if [ ! -f "$f" ]; then
-               echo "⚠️ Force creating: $f"
-               sudo touch "$f"
-            fi
+          # Force create known system modulemaps that V8 often misses
+          # DarwinBasic, DarwinFoundation, plus DarwinFoundation1..10
+          for name in DarwinBasic DarwinFoundation; do
+             f="$SDK_PATH/usr/include/$name.modulemap"
+             if [ ! -f "$f" ]; then
+                 echo "⚠️ Force creating: $f"
+                 sudo touch "$f"
+             fi
+          done
+
+          for i in {1..10}; do
+             f="$SDK_PATH/usr/include/DarwinFoundation$i.modulemap"
+             if [ ! -f "$f" ]; then
+                 echo "⚠️ Force creating: $f"
+                 sudo touch "$f"
+             fi
           done
 
       - name: Build V8 Monolith
