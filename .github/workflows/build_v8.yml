@@ -70,15 +70,15 @@ jobs:
           mkdir -p out.gn/x64.release
 
           # Base GN Args
-          GN_ARGS="is_debug=false target_cpu=\"x64\" is_component_build=false v8_monolithic=true v8_use_external_startup_data=false is_clang=true symbol_level=0 v8_enable_v8_checks=false treat_warnings_as_errors=false v8_enable_web_assembly=true v8_enable_google_benchmark=false v8_enable_i18n_support=true"
+          GN_ARGS="is_debug=false target_cpu=\"x64\" is_component_build=false v8_monolithic=true v8_use_external_startup_data=false is_clang=true symbol_level=0 v8_enable_v8_checks=false treat_warnings_as_errors=false v8_enable_web_assembly=true v8_enable_google_benchmark=false v8_enable_i18n_support=true clang_use_chrome_plugins=false"
 
           if [[ "${{ matrix.os }}" == "windows-2022" ]]; then
              GN_ARGS="$GN_ARGS use_lld=true use_custom_libcxx=true use_libcxx_modules=false"
           elif [[ "${{ matrix.os }}" == "ubuntu-22.04" ]]; then
              GN_ARGS="$GN_ARGS use_custom_libcxx=true use_libcxx_modules=false"
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-             # macOS Xcode 16 fix: use system libc++ and disable modules
-             GN_ARGS="$GN_ARGS use_custom_libcxx=false use_libcxx_modules=false"
+             # macOS Xcode 16/libc++ fix: use system libc++, disable modules and precompiled headers
+             GN_ARGS="$GN_ARGS use_custom_libcxx=false use_libcxx_modules=false enable_precompiled_headers=false"
           fi
 
           echo "$GN_ARGS" > out.gn/x64.release/args.gn
@@ -120,13 +120,14 @@ jobs:
           usesh: true
           mem: 4096
           prepare: |
-            pkg install -y git python3 py311-setuptools ninja gn gperf bash bison clang
+            pkg install -y git python3 py311-setuptools ninja gn gperf bash bison llvm
           run: |
             cd v8_build/v8
 
             # Configure GN with system tools
             mkdir -p out.gn/x64.release
-            echo 'is_debug=false target_cpu="x64" is_component_build=false v8_monolithic=true v8_use_external_startup_data=false is_clang=true use_custom_libcxx=false use_libcxx_modules=false v8_enable_pointer_compression=true v8_enable_sandbox=true symbol_level=0 v8_enable_i18n_support=true clang_base_path="/usr" clang_use_chrome_plugins=false' > out.gn/x64.release/args.gn
+            # On FreeBSD, pkg 'llvm' installs to /usr/local
+            echo 'is_debug=false target_cpu="x64" is_component_build=false v8_monolithic=true v8_use_external_startup_data=false is_clang=true use_custom_libcxx=false use_libcxx_modules=false v8_enable_pointer_compression=true v8_enable_sandbox=true symbol_level=0 v8_enable_i18n_support=true clang_base_path="/usr/local" clang_use_chrome_plugins=false' > out.gn/x64.release/args.gn
 
             # Use system GN
             gn gen out.gn/x64.release
