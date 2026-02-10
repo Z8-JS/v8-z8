@@ -125,6 +125,7 @@ jobs:
           v8_enable_google_benchmark = false
           v8_enable_i18n_support = true
           clang_use_chrome_plugins = false
+          enable_rust = false
           GNEOF
 
           # Platform-specific overrides
