@@ -117,6 +117,24 @@ jobs:
           cat "$BUILD_DIR/args.gn"
           gn gen "$BUILD_DIR"
 
+      - name: Fix macOS SDK missing modulemaps
+        if: runner.os == 'macOS'
+        working-directory: v8_build/v8
+        run: |
+          BUILD_DIR="out.gn/${{ matrix.config.target_cpu }}.release"
+          SDK_PATH=$(xcrun --show-sdk-path)
+          echo "SDK path: $SDK_PATH"
+
+          # Scan build.ninja for all referenced .modulemap files in the SDK
+          # and create empty stubs for any that are missing
+          grep -oh "${SDK_PATH}[^ ]*\.modulemap" "$BUILD_DIR/build.ninja" | sort -u | while read f; do
+            if [ ! -f "$f" ]; then
+              echo "Creating missing modulemap: $f"
+              sudo mkdir -p "$(dirname "$f")"
+              sudo touch "$f"
+            fi
+          done
+
       - name: Build V8 Monolith
         working-directory: v8_build/v8
         run: ninja -C out.gn/${{ matrix.config.target_cpu }}.release v8_monolith
