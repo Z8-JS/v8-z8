@@ -20,8 +20,8 @@ jobs:
             os: ubuntu-22.04
             target_cpu: x64
           - name: macOS
-            os: macos-13
-            target_cpu: x64
+            os: macos-14
+            target_cpu: arm64
 
     env:
       DEPOT_TOOLS_WIN_TOOLCHAIN: 0
@@ -61,6 +61,13 @@ jobs:
           cd v8
           gclient sync --no-history --shallow
 
+      - name: Select Xcode 15 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ls /Applications/ | grep Xcode
+          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode_15.3.app || sudo xcode-select -s /Applications/Xcode_15.2.app || sudo xcode-select -s "$(ls -d /Applications/Xcode_15*.app | head -1)"
+          xcodebuild -version
+
       - name: Patch V8 Source (Windows)
         if: runner.os == 'Windows'
         working-directory: v8_build/v8
@@ -76,10 +83,11 @@ jobs:
         working-directory: v8_build/v8
         shell: bash
         run: |
-          mkdir -p out.gn/x64.release
+          BUILD_DIR="out.gn/${{ matrix.config.target_cpu }}.release"
+          mkdir -p "$BUILD_DIR"
 
           # Base GN Args (shared across all platforms)
-          cat > out.gn/x64.release/args.gn << 'GNEOF'
+          cat > "$BUILD_DIR/args.gn" << GNEOF
           is_debug = false
           target_cpu = "${{ matrix.config.target_cpu }}"
           is_component_build = false
@@ -101,21 +109,21 @@ jobs:
 
           # Platform-specific overrides
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            echo "use_lld = true" >> out.gn/x64.release/args.gn
+            echo "use_lld = true" >> "$BUILD_DIR/args.gn"
           fi
 
-          cat out.gn/x64.release/args.gn
-          gn gen out.gn/x64.release
+          cat "$BUILD_DIR/args.gn"
+          gn gen "$BUILD_DIR"
 
       - name: Build V8 Monolith
         working-directory: v8_build/v8
-        run: ninja -C out.gn/x64.release v8_monolith
+        run: ninja -C out.gn/${{ matrix.config.target_cpu }}.release v8_monolith
 
       - name: Upload V8 Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: v8_monolith_${{ matrix.config.name }}_${{ matrix.config.target_cpu }}
           path: |
-            v8_build/v8/out.gn/x64.release/obj/v8_monolith.*
-            v8_build/v8/out.gn/x64.release/icudtl.dat
+            v8_build/v8/out.gn/${{ matrix.config.target_cpu }}.release/obj/v8_monolith.*
+            v8_build/v8/out.gn/${{ matrix.config.target_cpu }}.release/icudtl.dat
             v8_build/v8/include
