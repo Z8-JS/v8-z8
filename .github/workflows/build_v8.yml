@@ -110,6 +110,8 @@ jobs:
           # Platform-specific overrides
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             echo "use_lld = true" >> "$BUILD_DIR/args.gn"
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            echo 'mac_sdk_min = "14.0"' >> "$BUILD_DIR/args.gn"
           fi
 
           cat "$BUILD_DIR/args.gn"
