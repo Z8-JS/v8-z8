@@ -6,13 +6,22 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-v8-desktop:
-    name: Build V8 on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+  build-v8:
+    name: Build V8 on ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, ubuntu-22.04, macos-latest]
+        config:
+          - name: Windows
+            os: windows-2022
+            target_cpu: x64
+          - name: Linux
+            os: ubuntu-22.04
+            target_cpu: x64
+          - name: macOS
+            os: macos-13
+            target_cpu: x64
 
     env:
       DEPOT_TOOLS_WIN_TOOLCHAIN: 0
@@ -69,19 +78,33 @@ jobs:
         run: |
           mkdir -p out.gn/x64.release
 
-          # Base GN Args
-          GN_ARGS="is_debug=false target_cpu=\"x64\" is_component_build=false v8_monolithic=true v8_use_external_startup_data=false is_clang=true symbol_level=0 v8_enable_v8_checks=false treat_warnings_as_errors=false v8_enable_web_assembly=true v8_enable_google_benchmark=false v8_enable_i18n_support=true clang_use_chrome_plugins=false"
+          # Base GN Args (shared across all platforms)
+          cat > out.gn/x64.release/args.gn << 'GNEOF'
+          is_debug = false
+          target_cpu = "${{ matrix.config.target_cpu }}"
+          is_component_build = false
+          v8_monolithic = true
+          v8_use_external_startup_data = false
+          is_clang = true
+          use_custom_libcxx = true
+          use_libcxx_modules = false
+          v8_enable_pointer_compression = true
+          v8_enable_sandbox = true
+          symbol_level = 0
+          v8_enable_v8_checks = false
+          treat_warnings_as_errors = false
+          v8_enable_web_assembly = true
+          v8_enable_google_benchmark = false
+          v8_enable_i18n_support = true
+          clang_use_chrome_plugins = false
+          GNEOF
 
-          if [[ "${{ matrix.os }}" == "windows-2022" ]]; then
-             GN_ARGS="$GN_ARGS use_lld=true use_custom_libcxx=true use_libcxx_modules=false"
-          elif [[ "${{ matrix.os }}" == "ubuntu-22.04" ]]; then
-             GN_ARGS="$GN_ARGS use_custom_libcxx=true use_libcxx_modules=false"
-          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-             # macOS Xcode 16/libc++ fix: use system libc++, disable modules and precompiled headers
-             GN_ARGS="$GN_ARGS use_custom_libcxx=false use_libcxx_modules=false enable_precompiled_headers=false"
+          # Platform-specific overrides
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            echo "use_lld = true" >> out.gn/x64.release/args.gn
           fi
 
-          echo "$GN_ARGS" > out.gn/x64.release/args.gn
+          cat out.gn/x64.release/args.gn
           gn gen out.gn/x64.release
 
       - name: Build V8 Monolith
@@ -91,55 +114,8 @@ jobs:
       - name: Upload V8 Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: v8_monolith_${{ matrix.os }}_x64
+          name: v8_monolith_${{ matrix.config.name }}_${{ matrix.config.target_cpu }}
           path: |
             v8_build/v8/out.gn/x64.release/obj/v8_monolith.*
-            v8_build/v8/out.gn/x64.release/icudtl.dat
-            v8_build/v8/include
-
-  build-v8-freebsd:
-    name: Build V8 on FreeBSD
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Fetch V8 Source (on Ubuntu Host)
-        run: |
-          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
-          export PATH="$HOME/depot_tools:$PATH"
-          gclient --version
-          export DEPOT_TOOLS_UPDATE=0
-          mkdir v8_build && cd v8_build
-          fetch --no-history v8
-          cd v8
-          gclient sync --no-history --shallow
-
-      - name: Build V8 in FreeBSD VM
-        uses: vmactions/freebsd-vm@v1
-        with:
-          usesh: true
-          mem: 4096
-          prepare: |
-            pkg install -y git python3 py311-setuptools ninja gn gperf bash bison llvm
-          run: |
-            cd v8_build/v8
-
-            # Configure GN with system tools
-            mkdir -p out.gn/x64.release
-            # On FreeBSD, pkg 'llvm' installs to /usr/local
-            echo 'is_debug=false target_cpu="x64" is_component_build=false v8_monolithic=true v8_use_external_startup_data=false is_clang=true use_custom_libcxx=false use_libcxx_modules=false v8_enable_pointer_compression=true v8_enable_sandbox=true symbol_level=0 v8_enable_i18n_support=true clang_base_path="/usr/local" clang_use_chrome_plugins=false' > out.gn/x64.release/args.gn
-
-            # Use system GN
-            gn gen out.gn/x64.release
-
-            # Build
-            ninja -C out.gn/x64.release v8_monolith
-
-      - name: Upload Artifacts (FreeBSD)
-        uses: actions/upload-artifact@v4
-        with:
-          name: v8_monolith_freebsd_x64
-          path: |
-            v8_build/v8/out.gn/x64.release/obj/v8_monolith.a
             v8_build/v8/out.gn/x64.release/icudtl.dat
             v8_build/v8/include
