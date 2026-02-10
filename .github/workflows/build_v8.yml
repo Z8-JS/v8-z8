@@ -85,17 +85,14 @@ jobs:
           SDK_PATH=$(xcrun --show-sdk-path)
           echo "SDK path: $SDK_PATH"
           INCLUDE_DIR="$SDK_PATH/usr/include"
-
-          # V8/Chromium libc++ build compiles PCMs for _AvailabilityInternal module
-          # from Darwin*.modulemap files. These exist in macOS 15+ SDK but NOT in 14.x.
-          # Create stubs with correct module declaration so Clang can compile empty PCMs.
-          CONTENT='module _AvailabilityInternal [system] [extern_c] {}'
-
+          # Create empty stubs for missing modulemaps just in case.
+          # We don't write "module _AvailabilityInternal" content anymore to avoid "redefinition" errors
+          # if multiple maps are loaded.
           for name in DarwinBasic DarwinFoundation DarwinFoundation1 DarwinFoundation2 DarwinFoundation3 DarwinFoundation4 DarwinFoundation5 DarwinFoundation6 DarwinFoundation7 DarwinFoundation8 DarwinFoundation9 DarwinFoundation10; do
             f="$INCLUDE_DIR/$name.modulemap"
             if [ ! -f "$f" ]; then
-              echo "Creating: $f"
-              echo "$CONTENT" | sudo tee "$f" > /dev/null
+              echo "Creating stub: $f"
+              sudo touch "$f"
             fi
           done
 
@@ -125,7 +122,6 @@ jobs:
           v8_enable_google_benchmark = false
           v8_enable_i18n_support = true
           clang_use_chrome_plugins = false
-          enable_rust = false
           GNEOF
 
           # Platform-specific overrides
@@ -133,26 +129,13 @@ jobs:
             echo "use_lld = true" >> "$BUILD_DIR/args.gn"
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             echo 'mac_sdk_min = "14.0"' >> "$BUILD_DIR/args.gn"
+            # macOS: CRITICAL - use system libc++ to avoid V8's internal libc++ modulemap nightmare
+            echo 'use_custom_libcxx = false' >> "$BUILD_DIR/args.gn"
+            echo 'enable_precompiled_headers = false' >> "$BUILD_DIR/args.gn"
           fi
 
           cat "$BUILD_DIR/args.gn"
           gn gen "$BUILD_DIR"
-
-      - name: Fix remaining missing modulemaps
-        if: runner.os == 'macOS'
-        working-directory: v8_build/v8
-        run: |
-          BUILD_DIR="out.gn/${{ matrix.config.target_cpu }}.release"
-          CONTENT='module _AvailabilityInternal [system] [extern_c] {}'
-
-          # Scan build.ninja for any additional missing modulemap files
-          grep -o "/[^ ]*\.modulemap" "$BUILD_DIR/build.ninja" | sort -u | while read f; do
-            if [ ! -f "$f" ]; then
-              echo "Creating scanned missing modulemap: $f"
-              sudo mkdir -p "$(dirname "$f")"
-              echo "$CONTENT" | sudo tee "$f" > /dev/null
-            fi
-          done
 
       - name: Build V8 Monolith
         working-directory: v8_build/v8
