@@ -19,9 +19,6 @@ jobs:
           - name: Linux
             os: ubuntu-22.04
             target_cpu: x64
-          - name: macOS
-            os: macos-14
-            target_cpu: arm64
 
     env:
       DEPOT_TOOLS_WIN_TOOLCHAIN: 0
@@ -61,13 +58,6 @@ jobs:
           cd v8
           gclient sync --no-history --shallow
 
-      - name: Select Xcode 15 (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          ls /Applications/ | grep Xcode
-          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode_15.3.app || sudo xcode-select -s /Applications/Xcode_15.2.app || sudo xcode-select -s "$(ls -d /Applications/Xcode_15*.app | head -1)"
-          xcodebuild -version
-
       - name: Patch V8 Source (Windows)
         if: runner.os == 'Windows'
         working-directory: v8_build/v8
@@ -78,23 +68,6 @@ jobs:
             (Get-Content $backing_store) -replace 'fn, internal::AllocationType::kOld', '[&](){ return fn(); }, internal::AllocationType::kOld' | Set-Content $backing_store
             Write-Host "✅ Patched backing-store.cc"
           }
-
-      - name: Fix macOS SDK modulemaps
-        if: runner.os == 'macOS'
-        run: |
-          SDK_PATH=$(xcrun --show-sdk-path)
-          echo "SDK path: $SDK_PATH"
-          INCLUDE_DIR="$SDK_PATH/usr/include"
-          # Create empty stubs for missing modulemaps just in case.
-          # We don't write "module _AvailabilityInternal" content anymore to avoid "redefinition" errors
-          # if multiple maps are loaded.
-          for name in DarwinBasic DarwinFoundation DarwinFoundation1 DarwinFoundation2 DarwinFoundation3 DarwinFoundation4 DarwinFoundation5 DarwinFoundation6 DarwinFoundation7 DarwinFoundation8 DarwinFoundation9 DarwinFoundation10; do
-            f="$INCLUDE_DIR/$name.modulemap"
-            if [ ! -f "$f" ]; then
-              echo "Creating stub: $f"
-              sudo touch "$f"
-            fi
-          done
 
       - name: Configure Build
         working-directory: v8_build/v8
@@ -127,11 +100,6 @@ jobs:
           # Platform-specific overrides
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             echo "use_lld = true" >> "$BUILD_DIR/args.gn"
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            echo 'mac_sdk_min = "14.0"' >> "$BUILD_DIR/args.gn"
-            # macOS: CRITICAL - use system libc++ to avoid V8's internal libc++ modulemap nightmare
-            echo 'use_custom_libcxx = false' >> "$BUILD_DIR/args.gn"
-            echo 'enable_precompiled_headers = false' >> "$BUILD_DIR/args.gn"
           fi
 
           cat "$BUILD_DIR/args.gn"

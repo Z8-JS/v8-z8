@@ -1,6 +1,9 @@
 # v8-z8 (Zane V8 Build Engine)
 
-This repository contains the CI/CD infrastructure to build the **V8 JavaScript Engine** as a monolithic library for Windows using **Clang**.
+> [!WARNING]
+> **macOS** and **FreeBSD** are temporarily unsupported due to technical issues with the latest V8 build system and SDK compatibility. We are currently focusing on **Windows** and **Linux** support.
+
+This repository contains the CI/CD infrastructure to build the **V8 JavaScript Engine** as a monolithic library for Windows and Linux using **Clang**.
 
 ## 🚀 Purpose
 
