@@ -78,30 +78,32 @@ jobs:
           BUILD_DIR="out.gn/${{ matrix.config.target_cpu }}.release"
           mkdir -p "$BUILD_DIR"
 
-          # Base GN Args (shared across all platforms)
-          cat > "$BUILD_DIR/args.gn" << GNEOF
-          is_debug = false
-          target_cpu = "${{ matrix.config.target_cpu }}"
-          is_component_build = false
-          v8_monolithic = true
-          v8_use_external_startup_data = false
-          is_clang = false
-          use_custom_libcxx = false
-          use_libcxx_modules = false
-          v8_enable_pointer_compression = true
-          v8_enable_sandbox = true
-          symbol_level = 0
-          v8_enable_v8_checks = false
-          treat_warnings_as_errors = false
-          v8_enable_web_assembly = true
-          v8_enable_google_benchmark = false
-          v8_enable_i18n_support = true
-          clang_use_chrome_plugins = false
-          GNEOF
+          # Common Args
+          echo 'is_debug = false' > "$BUILD_DIR/args.gn"
+          echo 'target_cpu = "${{ matrix.config.target_cpu }}"' >> "$BUILD_DIR/args.gn"
+          echo 'is_component_build = false' >> "$BUILD_DIR/args.gn"
+          echo 'v8_monolithic = true' >> "$BUILD_DIR/args.gn"
+          echo 'v8_use_external_startup_data = false' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_pointer_compression = true' >> "$BUILD_DIR/args.gn"
+          echo 'symbol_level = 0' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_v8_checks = false' >> "$BUILD_DIR/args.gn"
+          echo 'treat_warnings_as_errors = false' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_web_assembly = true' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_google_benchmark = false' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_i18n_support = true' >> "$BUILD_DIR/args.gn"
+          echo 'use_libcxx_modules = false' >> "$BUILD_DIR/args.gn"
 
-          # Platform-specific overrides
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            echo "use_lld = true" >> "$BUILD_DIR/args.gn"
+          if [[ "${{ matrix.config.name }}" == "Windows" ]]; then
+            # Windows specific: Use MSVC (is_clang = false), disable restricted features
+            echo 'is_clang = false' >> "$BUILD_DIR/args.gn"
+            echo 'use_custom_libcxx = false' >> "$BUILD_DIR/args.gn"
+            echo 'v8_enable_sandbox = false' >> "$BUILD_DIR/args.gn"
+            echo 'clang_use_chrome_plugins = false' >> "$BUILD_DIR/args.gn"
+          else
+            # Linux specific: Use Clang (default), keep sandbox enabled
+            echo 'is_clang = true' >> "$BUILD_DIR/args.gn"
+            echo 'use_custom_libcxx = true' >> "$BUILD_DIR/args.gn"
+            echo 'v8_enable_sandbox = true' >> "$BUILD_DIR/args.gn"
           fi
 
           cat "$BUILD_DIR/args.gn"
