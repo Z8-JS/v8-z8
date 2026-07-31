@@ -1,0 +1,45 @@
+name: Build V8 All Platforms (Orchestrator)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trigger-builds:
+    name: Trigger All Sub-Build Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Windows Build
+        uses: convictional/trigger-workflow-and-wait@v1.6.5
+        with:
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow_file_name: build_v8_windows.yml
+          ref: ${{ github.ref }}
+
+      - name: Trigger Linux Build
+        uses: convictional/trigger-workflow-and-wait@v1.6.5
+        with:
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow_file_name: build_v8_linux.yml
+          ref: ${{ github.ref }}
+
+      - name: Trigger macOS ARM64 Build
+        uses: convictional/trigger-workflow-and-wait@v1.6.5
+        with:
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow_file_name: build_v8_macos_arm64.yml
+          ref: ${{ github.ref }}
+
+      - name: Trigger macOS x64 Build
+        uses: convictional/trigger-workflow-and-wait@v1.6.5
+        with:
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow_file_name: build_v8_macos_x64.yml
+          ref: ${{ github.ref }}

@@ -1,0 +1,78 @@
+name: Build V8 macOS ARM64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-v8:
+    name: Build V8 on macOS ARM64
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Depot Tools (Unix)
+        run: |
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
+          echo "$HOME/depot_tools" >> $GITHUB_PATH
+          export PATH="$HOME/depot_tools:$PATH"
+          gclient --version
+
+      - name: Fetch V8 Source
+        shell: bash
+        run: |
+          mkdir v8_build
+          cd v8_build
+          export DEPOT_TOOLS_UPDATE=0
+          fetch --no-history v8
+          cd v8
+          git fetch origin refs/tags/14.7.13:refs/tags/14.7.13 --depth=1
+          git checkout 14.7.13
+          gclient sync --no-history --shallow --force
+
+      - name: Configure Build
+        working-directory: v8_build/v8
+        shell: bash
+        run: |
+          BUILD_DIR="out.gn/arm64.release"
+          mkdir -p "$BUILD_DIR"
+
+          echo 'is_debug = false' > "$BUILD_DIR/args.gn"
+          echo 'target_cpu = "arm64"' >> "$BUILD_DIR/args.gn"
+          echo 'is_component_build = false' >> "$BUILD_DIR/args.gn"
+          echo 'v8_monolithic = true' >> "$BUILD_DIR/args.gn"
+          echo 'v8_use_external_startup_data = false' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_pointer_compression = true' >> "$BUILD_DIR/args.gn"
+          echo 'symbol_level = 0' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_v8_checks = false' >> "$BUILD_DIR/args.gn"
+          echo 'treat_warnings_as_errors = false' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_web_assembly = true' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_google_benchmark = false' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_i18n_support = true' >> "$BUILD_DIR/args.gn"
+          echo 'use_libcxx_modules = false' >> "$BUILD_DIR/args.gn"
+          echo 'build_with_chromium = false' >> "$BUILD_DIR/args.gn"
+          echo 'is_clang = true' >> "$BUILD_DIR/args.gn"
+          echo 'use_custom_libcxx = false' >> "$BUILD_DIR/args.gn"
+          echo 'v8_enable_sandbox = false' >> "$BUILD_DIR/args.gn"
+          echo 'mac_sdk_min = "14.0"' >> "$BUILD_DIR/args.gn"
+
+          cat "$BUILD_DIR/args.gn"
+          gn gen "$BUILD_DIR"
+
+      - name: Build V8 Monolith
+        working-directory: v8_build/v8
+        run: ninja -C out.gn/arm64.release v8_monolith
+
+      - name: Upload V8 Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: v8_monolith_macOS_ARM64
+          path: |
+            v8_build/v8/out.gn/arm64.release/obj/v8_monolith.*
+            v8_build/v8/out.gn/arm64.release/icudtl.dat
+            v8_build/v8/include
