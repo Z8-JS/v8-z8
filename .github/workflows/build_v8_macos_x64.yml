@@ -6,7 +6,7 @@ on:
 jobs:
   build-v8:
     name: Build V8 on macOS x64
-    runs-on: macos-13
+    runs-on: macos-15-intel
 
     steps:
       - uses: actions/checkout@v4
