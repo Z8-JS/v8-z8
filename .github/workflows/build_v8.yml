@@ -19,6 +19,12 @@ jobs:
           - name: Linux
             os: ubuntu-22.04
             target_cpu: x64
+          - name: macOS ARM64
+            os: macos-14
+            target_cpu: arm64
+          - name: macOS x64
+            os: macos-13
+            target_cpu: x64
 
     env:
       DEPOT_TOOLS_WIN_TOOLCHAIN: 0
