@@ -73,6 +73,7 @@ jobs:
         with:
           name: v8_monolith_Linux_ARM64
           path: |
-            v8_build/v8/out.gn/arm64.release/obj/v8_monolith.*
+            v8_build/v8/out.gn/arm64.release/obj/third_party/v8/v8_monolith/libv8_monolith.a
+            v8_build/v8/out.gn/arm64.release/obj/v8_monolith.lib
             v8_build/v8/out.gn/arm64.release/icudtl.dat
             v8_build/v8/include
