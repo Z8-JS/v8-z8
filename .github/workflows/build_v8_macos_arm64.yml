@@ -71,14 +71,17 @@ jobs:
 
       - name: Build V8 Monolith
         working-directory: v8_build/v8
-        run: ninja -C out.gn/arm64.release v8_monolith
+        run: |
+          ninja -C out.gn/arm64.release v8_monolith
+          echo "=== Check built files ==="
+          find out.gn/arm64.release/obj -name "*v8_monolith*" -o -name "libv8_monolith.a"
 
       - name: Upload V8 Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: v8_monolith_macOS_ARM64
           path: |
-            v8_build/v8/out.gn/arm64.release/obj/third_party/v8/v8_monolith/libv8_monolith.a
-            v8_build/v8/out.gn/arm64.release/obj/v8_monolith.lib
+            v8_build/v8/out.gn/arm64.release/obj/**/libv8_monolith.a
+            v8_build/v8/out.gn/arm64.release/obj/**/v8_monolith.*
             v8_build/v8/out.gn/arm64.release/icudtl.dat
             v8_build/v8/include
