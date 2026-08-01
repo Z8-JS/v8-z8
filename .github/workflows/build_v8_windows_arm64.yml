@@ -1,7 +1,8 @@
-name: Build V8 Windows ARM64
+# name: Build V8 Windows ARM64
+# Disabled temporarily until ARM resources are available
 
-on:
-  workflow_dispatch:
+# on:
+#   workflow_dispatch:
 
 jobs:
   build-v8:

@@ -2,13 +2,39 @@ name: Build V8 All Platforms (Orchestrator)
 
 on:
   workflow_dispatch:
+    inputs:
+      build_windows_x64:
+        description: "Build Windows x64"
+        type: boolean
+        default: true
+      build_linux_x64:
+        description: "Build Linux x64"
+        type: boolean
+        default: true
+      build_macos_arm64:
+        description: "Build macOS ARM64"
+        type: boolean
+        default: true
+      build_macos_x64:
+        description: "Build macOS x64"
+        type: boolean
+        default: true
+      create_release:
+        description: "Create GitHub Release after all builds complete"
+        type: boolean
+        default: false
+      release_tag:
+        description: "Release Tag Name (e.g. v14.7.13-1)"
+        type: string
+        default: "v14.7.13"
 
 jobs:
   trigger-builds:
-    name: Trigger All Sub-Build Workflows
+    name: Trigger Selected Sub-Build Workflows
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Windows x64 Build
+        if: ${{ github.event.inputs.build_windows_x64 == 'true' }}
         uses: convictional/trigger-workflow-and-wait@v1.6.5
         with:
           owner: ${{ github.repository_owner }}
@@ -17,16 +43,8 @@ jobs:
           workflow_file_name: build_v8_windows.yml
           ref: ${{ github.ref }}
 
-      - name: Trigger Windows ARM64 Build
-        uses: convictional/trigger-workflow-and-wait@v1.6.5
-        with:
-          owner: ${{ github.repository_owner }}
-          repo: ${{ github.event.repository.name }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow_file_name: build_v8_windows_arm64.yml
-          ref: ${{ github.ref }}
-
       - name: Trigger Linux x64 Build
+        if: ${{ github.event.inputs.build_linux_x64 == 'true' }}
         uses: convictional/trigger-workflow-and-wait@v1.6.5
         with:
           owner: ${{ github.repository_owner }}
@@ -35,16 +53,8 @@ jobs:
           workflow_file_name: build_v8_linux.yml
           ref: ${{ github.ref }}
 
-      - name: Trigger Linux ARM64 Build
-        uses: convictional/trigger-workflow-and-wait@v1.6.5
-        with:
-          owner: ${{ github.repository_owner }}
-          repo: ${{ github.event.repository.name }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow_file_name: build_v8_linux_arm64.yml
-          ref: ${{ github.ref }}
-
       - name: Trigger macOS ARM64 Build
+        if: ${{ github.event.inputs.build_macos_arm64 == 'true' }}
         uses: convictional/trigger-workflow-and-wait@v1.6.5
         with:
           owner: ${{ github.repository_owner }}
@@ -54,6 +64,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Trigger macOS x64 Build
+        if: ${{ github.event.inputs.build_macos_x64 == 'true' }}
         uses: convictional/trigger-workflow-and-wait@v1.6.5
         with:
           owner: ${{ github.repository_owner }}
@@ -61,3 +72,60 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow_file_name: build_v8_macos_x64.yml
           ref: ${{ github.ref }}
+
+  create-release:
+    name: Create GitHub Release
+    needs: trigger-builds
+    if: ${{ github.event.inputs.create_release == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows x64 Artifact
+        if: ${{ github.event.inputs.build_windows_x64 == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: v8_monolith_Windows_x64
+          path: artifacts/v8_monolith_Windows_x64
+
+      - name: Download Linux x64 Artifact
+        if: ${{ github.event.inputs.build_linux_x64 == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: v8_monolith_Linux_x64
+          path: artifacts/v8_monolith_Linux_x64
+
+      - name: Download macOS ARM64 Artifact
+        if: ${{ github.event.inputs.build_macos_arm64 == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: v8_monolith_macOS_ARM64
+          path: artifacts/v8_monolith_macOS_ARM64
+
+      - name: Download macOS x64 Artifact
+        if: ${{ github.event.inputs.build_macos_x64 == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: v8_monolith_macOS_x64
+          path: artifacts/v8_monolith_macOS_x64
+
+      - name: Compress Artifacts into Zip files
+        run: |
+          mkdir release_assets
+          cd artifacts
+          for dir in *; do
+            if [ -d "$dir" ]; then
+              zip -r "../release_assets/${dir}.zip" "$dir"
+            fi
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: V8 Monolith Build ${{ github.event.inputs.release_tag }}
+          draft: false
+          prerelease: false
+          files: release_assets/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
